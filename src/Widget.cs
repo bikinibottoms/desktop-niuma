@@ -86,7 +86,7 @@ sealed partial class Widget : Window, IDisposable
         Title = "桌面牛马";
         Width = 425;
         SizeToContent = SizeToContent.Height;
-        ResizeMode = ResizeMode.NoResize;
+        ResizeMode = ResizeMode.CanMinimize;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
