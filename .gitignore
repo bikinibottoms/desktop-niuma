@@ -1,0 +1,8 @@
+.sdk/
+**/bin/
+**/obj/
+release/
+/目标效果图.jpg
+ledger.json*
+.env
+.env.*
