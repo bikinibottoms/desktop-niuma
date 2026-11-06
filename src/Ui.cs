@@ -153,11 +153,12 @@ sealed class Editor : Window
         Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
-    public void Add(string label, FrameworkElement control)
+    public StackPanel Add(string label, FrameworkElement control)
     {
-        fields.Children.Add(Ui.Text(label, 13, Ui.Muted));
         control.Margin = new Thickness(0, 2, 0, 6);
-        fields.Children.Add(control);
+        var section = Ui.Stack(Ui.Text(label, 13, Ui.Muted), control);
+        fields.Children.Add(section);
+        return section;
     }
 
     public TextBox Field(string label, string value = "", int limit = 100)

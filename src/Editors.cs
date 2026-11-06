@@ -59,8 +59,14 @@ sealed partial class Widget
         var end = form.Field("默认下班时间 · 早于上班时间表示次日", plan?.End.ToString("HH:mm") ?? "18:00");
         var kind = form.Choice("薪资方式", PayLabels, (int)(plan?.Kind ?? PayKind.Hourly));
         var amount = form.Field("薪资（元）", plan?.Pay.ToString(CultureInfo.InvariantCulture) ?? "");
-        var days = form.Field("每月计薪天数 · 仅用于月薪", (plan?.PayDays ?? 22).ToString());
+        var days = new TextBox { Text = (plan?.PayDays ?? 22).ToString(), MaxLength = 2,
+            Padding = new Thickness(6), FontSize = 14 };
+        var daysSection = form.Add("每月计薪天数", days);
+        var explanation = Ui.Text("", 13, Ui.Muted);
+        form.Add("计算方式", explanation);
         var overtime = form.Field("加班时薪（元） · 留空用计划默认时薪", plan?.OvertimeRate?.ToString(CultureInfo.InvariantCulture) ?? "");
+        kind.SelectionChanged += (_, _) => UpdatePayFields();
+        UpdatePayFields();
         form.Finish(() =>
         {
             var first = Time(start.Text);
@@ -75,6 +81,18 @@ sealed partial class Widget
             else list[list.FindIndex(p => p.Id == plan.Id)] = next;
             Save(data with { Plans = list, Selected = next.Id });
         });
+
+        void UpdatePayFields()
+        {
+            daysSection.Visibility = kind.SelectedIndex == (int)PayKind.Monthly
+                ? Visibility.Visible : Visibility.Collapsed;
+            explanation.Text = (PayKind)kind.SelectedIndex switch
+            {
+                PayKind.Hourly => "薪资填写每小时金额。收入 = 时薪 × 实际打卡时长，按秒累计；提前下班按实际时长结算。",
+                PayKind.Daily => "薪资填写每天金额，按本次打卡到预计下班的时长逐秒累计。月报按实际打卡日期统计工作天数，支持补卡。",
+                _ => "薪资填写每月金额。每日收入 = 月薪 ÷ 每月计薪天数，再按本次打卡到预计下班的时长逐秒累计。"
+            };
+        }
     }
 
     private void StartNormal()
@@ -150,9 +168,8 @@ sealed partial class Widget
         });
     }
 
-    private void DrawGoal()
+    private void DrawGoal(DateTimeOffset? at = null)
     {
-        displayedGoals = data;
         var count = data.Goals.Count;
         nextGoal.Visibility = count > 1 ? Visibility.Visible : Visibility.Collapsed;
         goalContent.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -164,8 +181,8 @@ sealed partial class Widget
 
         goalIndex %= count;
         var goal = data.Goals[goalIndex];
-        var now = DateTimeOffset.Now;
-        var earned = data.Shifts.Where(s => s.End != null && s.Day >= goal.Since).Sum(s => s.Earned(now));
+        var now = at ?? DateTimeOffset.Now;
+        var earned = data.GoalEarned(goal, now);
         var left = Math.Max(0, goal.Amount - earned);
         var fraction = (double)Math.Min(1, earned / goal.Amount);
         var indexLabel = count > 1 ? $"  ·  {goalIndex + 1}/{count}" : "";
@@ -182,7 +199,7 @@ sealed partial class Widget
     {
         var editor = new Editor(this, "设置目标");
         var list = Ui.Stack();
-        editor.Add("目标进度显示在桌面小窗，按创建当日起的已结算收入累计。", list);
+        editor.Add("目标进度按创建当日起的收入累计，包含正在上班、加班的实时收入。", list);
         editor.Add("", Ui.Button("添加目标", () => EditGoal(null), true));
         DrawList();
         editor.ShowDialog();

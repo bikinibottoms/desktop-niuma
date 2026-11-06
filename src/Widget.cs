@@ -63,7 +63,6 @@ sealed partial class Widget : Window, IDisposable
     private readonly Meter goalMeter = new();
     private readonly Button nextGoal;
     private int goalIndex;
-    private Ledger? displayedGoals;
     private readonly ComboBox plans = new() { MinWidth = 155, MaxWidth = 230, DisplayMemberPath = nameof(Plan.Name) };
     private readonly WrapPanel actions = Ui.Row();
     private readonly Button pin;
@@ -298,7 +297,7 @@ sealed partial class Widget : Window, IDisposable
             : 0;
         progress.Set(fraction);
         progressLabel.Text = $"上班进度  {Ui.Percent(fraction)}";
-        if (!ReferenceEquals(displayedGoals, data)) DrawGoal();
+        DrawGoal(now);
         slogan.Text = Slogans[(now.Hour * 6 + now.Minute / 10) % Slogans.Length];
 
         if (!actionInitialized || active?.Id != displayedShift)

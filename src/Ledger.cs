@@ -54,6 +54,9 @@ record Ledger(List<Plan> Plans, List<Shift> Shifts, Dictionary<DateOnly, Mood> M
     [JsonIgnore]
     public Plan? SelectedPlan => Plans.FirstOrDefault(p => p.Id == Selected) ?? Plans.FirstOrDefault();
 
+    public decimal GoalEarned(Goal goal, DateTimeOffset now) =>
+        Shifts.Where(s => s.Day >= goal.Since).Sum(s => s.Earned(now));
+
     public Ledger Put(Shift entry)
     {
         DateTimeOffset stop = entry.End ?? DateTimeOffset.MaxValue;
