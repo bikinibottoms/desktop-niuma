@@ -44,7 +44,7 @@ record Shift(Guid Id, Plan Plan, bool Overtime, DateTimeOffset Start,
 
 record Mood(string Feeling, string Note);
 record Goal(Guid Id, string Name, decimal Amount, DateOnly Since);
-record Preferences(bool Topmost = false, int Water = 60, int Eyes = 30);
+record Preferences(bool Topmost = false, int Water = 60, int Eyes = 30, bool LightMode = false);
 record Ledger(List<Plan> Plans, List<Shift> Shifts, Dictionary<DateOnly, Mood> Moods,
     List<Goal> Goals, Guid? Selected, Preferences Preferences)
 {

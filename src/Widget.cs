@@ -66,6 +66,7 @@ sealed partial class Widget : Window, IDisposable
     private readonly ComboBox plans = new() { MinWidth = 155, MaxWidth = 230, DisplayMemberPath = nameof(Plan.Name) };
     private readonly WrapPanel actions = Ui.Row();
     private readonly Button pin;
+    private readonly Button theme;
     private bool selecting;
     private bool quitting;
     private bool closePending;
@@ -74,14 +75,13 @@ sealed partial class Widget : Window, IDisposable
     private DateTimeOffset waterDue;
     private DateTimeOffset eyesDue;
     private DateTimeOffset noticeUntil;
-    private static readonly string[] Slogans = ["今天的牛马，正在给明天的奶茶打工。",
-        "一秒一秒攒，离想买的东西又近一点。", "工位可以坐，肩膀记得放下来。",
-        "今天也有认真打工，收工就好好休息。"];
+    private readonly System.Diagnostics.Stopwatch sloganClock = System.Diagnostics.Stopwatch.StartNew();
 
     public Widget(Store store)
     {
         this.store = store;
         data = store.Load();
+        Ui.ApplyTheme(data.Preferences.LightMode);
         Title = "桌面牛马";
         Width = 425;
         SizeToContent = SizeToContent.Height;
@@ -102,6 +102,11 @@ sealed partial class Widget : Window, IDisposable
             Save(data with { Preferences = data.Preferences with { Topmost = !Topmost } });
             Topmost = data.Preferences.Topmost;
             pin!.Content = Topmost ? "取消置顶" : "置顶";
+        }));
+        theme = Ui.Button("", () => Guard(() =>
+        {
+            Save(data with { Preferences = data.Preferences with { LightMode = !data.Preferences.LightMode } });
+            ApplyTheme();
         }));
         var header = new DockPanel { Background = Brushes.Transparent };
         var minimize = Ui.Button("−", () => WindowState = WindowState.Minimized);
@@ -139,6 +144,7 @@ sealed partial class Widget : Window, IDisposable
         var goalCard = new Border { Background = Ui.Panel, CornerRadius = new CornerRadius(12),
             Padding = new Thickness(11, 4, 11, 8), Margin = new Thickness(0, 8, 0, 5),
             Child = Ui.Stack(goalHeader, goalTitle, goalContent) };
+        goalCard.SetResourceReference(Border.BackgroundProperty, "Panel");
         goalContent.Children.Add(goalMeter);
         goalContent.Children.Add(goalMoney);
         goalContent.Children.Add(goalTime);
@@ -146,10 +152,12 @@ sealed partial class Widget : Window, IDisposable
             detail, shiftCash, progressLabel, progress, Ui.Row(Ui.Text("本月已结算　", 13, Ui.Muted), monthCash),
             Ui.Row(plans, Ui.Button("管理计划", () => Guard(ManagePlans))), actions,
             goalCard, Ui.Row(Ui.Button("月报", () => Guard(Report)),
-                Ui.Button("提醒设置", () => Guard(Reminders))), notice, slogan);
+                Ui.Button("提醒设置", () => Guard(Reminders)), theme), notice, slogan);
         Content = new Border { Padding = new Thickness(19, 13, 19, 15), Background = Ui.Background,
             BorderBrush = Ui.Line, BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(16), Child = body };
+        ((Border)Content).SetResourceReference(Border.BackgroundProperty, "Background");
+        ((Border)Content).SetResourceReference(Border.BorderBrushProperty, "Line");
 
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示 / 隐藏小窗", null, (_, _) => Toggle());
@@ -157,6 +165,7 @@ sealed partial class Widget : Window, IDisposable
         tray = new Forms.NotifyIcon { Icon = trayIcon,
             Text = "桌面牛马", Visible = true, ContextMenuStrip = menu };
         tray.MouseClick += (_, args) => { if (args.Button == Forms.MouseButtons.Left) Toggle(); };
+        ApplyTheme();
 
         Closing += (_, args) =>
         {
@@ -234,6 +243,21 @@ sealed partial class Widget : Window, IDisposable
         Application.Current.Shutdown();
     }
 
+    private void ApplyTheme()
+    {
+        Ui.ApplyTheme(data.Preferences.LightMode);
+        theme.Content = data.Preferences.LightMode ? "深色模式" : "浅色模式";
+        theme.ToolTip = "切换深浅色外观";
+        progress.InvalidateVisual();
+        goalMeter.InvalidateVisual();
+        var menu = tray.ContextMenuStrip!;
+        menu.BackColor = System.Drawing.ColorTranslator.FromHtml(data.Preferences.LightMode ? "#E3EFED" : "#213743");
+        menu.ForeColor = System.Drawing.ColorTranslator.FromHtml(data.Preferences.LightMode ? "#203B43" : "#EEF5F4");
+        menu.Renderer = new Forms.ToolStripProfessionalRenderer(new TrayColors(data.Preferences.LightMode));
+        foreach (Window window in Application.Current.Windows)
+            WindowAppearance.Set(window, data.Preferences.LightMode);
+    }
+
     private void Guard(Action action)
     {
         try { action(); }
@@ -298,7 +322,7 @@ sealed partial class Widget : Window, IDisposable
         progress.Set(fraction);
         progressLabel.Text = $"上班进度  {Ui.Percent(fraction)}";
         DrawGoal(now);
-        slogan.Text = Slogans[(now.Hour * 6 + now.Minute / 10) % Slogans.Length];
+        slogan.Text = Slogans.At(sloganClock.Elapsed);
 
         if (!actionInitialized || active?.Id != displayedShift)
         {
@@ -347,4 +371,17 @@ sealed partial class Widget : Window, IDisposable
         if (notify && (!IsVisible || WindowState == WindowState.Minimized))
             tray.ShowBalloonTip(5000, "桌面牛马", text, Forms.ToolTipIcon.Info);
     }
+}
+
+sealed class TrayColors(bool light) : Forms.ProfessionalColorTable
+{
+    public override System.Drawing.Color MenuItemSelected =>
+        System.Drawing.ColorTranslator.FromHtml(light ? "#C4DDD6" : "#36535E");
+    public override System.Drawing.Color MenuItemBorder => System.Drawing.Color.Transparent;
+    public override System.Drawing.Color ImageMarginGradientBegin =>
+        System.Drawing.ColorTranslator.FromHtml(light ? "#E3EFED" : "#213743");
+    public override System.Drawing.Color ImageMarginGradientMiddle => ImageMarginGradientBegin;
+    public override System.Drawing.Color ImageMarginGradientEnd => ImageMarginGradientBegin;
+    public override System.Drawing.Color MenuBorder =>
+        System.Drawing.ColorTranslator.FromHtml(light ? "#A4BEBB" : "#36535E");
 }

@@ -9,13 +9,13 @@ namespace Niuma;
 
 static class Ui
 {
-    public static readonly Brush Ink = Color("#EEF5F4");
-    public static readonly Brush Muted = Color("#ACC2C7");
-    public static readonly Brush Red = Color("#FF7181");
-    public static readonly Brush Background = Color("#13232D");
-    public static readonly Brush Panel = Color("#213743");
-    public static readonly Brush Line = Color("#36535E");
-    public static readonly Brush Accent = Color("#86D8C2");
+    public static Brush Ink { get; private set; } = Color("#EEF5F4");
+    public static Brush Muted { get; private set; } = Color("#ACC2C7");
+    public static Brush Red { get; private set; } = Color("#FF7181");
+    public static Brush Background { get; private set; } = Color("#13232D");
+    public static Brush Panel { get; private set; } = Color("#213743");
+    public static Brush Line { get; private set; } = Color("#36535E");
+    public static Brush Accent { get; private set; } = Color("#86D8C2");
     private static readonly ControlTemplate ButtonTemplate = (ControlTemplate)XamlReader.Parse("""
         <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" TargetType="Button">
@@ -26,7 +26,7 @@ static class Ui
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="Surface" Property="BorderBrush" Value="#86D8C2"/>
+              <Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource Accent}"/>
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
               <Setter TargetName="Surface" Property="Opacity" Value="0.72"/>
@@ -38,13 +38,42 @@ static class Ui
         </ControlTemplate>
         """);
 
-    public static Brush Color(string value) => (Brush)new BrushConverter().ConvertFromString(value)!;
-    public static TextBlock Text(string value = "", double size = 14, Brush? color = null) =>
-        new() { Text = value, FontSize = size, Foreground = color ?? Ink, TextWrapping = TextWrapping.Wrap,
+    public static Brush Color(string value) =>
+        new SolidColorBrush((System.Windows.Media.Color)ColorConverter.ConvertFromString(value));
+
+    public static void ApplyTheme(bool light)
+    {
+        var keys = new[] { "Ink", "Muted", "Red", "Background", "Panel", "Line", "Accent" };
+        var colors = light
+            ? new[] { "#203B43", "#526F78", "#C52642", "#F3F8F7", "#E3EFED", "#A4BEBB", "#247663" }
+            : new[] { "#EEF5F4", "#ACC2C7", "#FF7181", "#13232D", "#213743", "#36535E", "#86D8C2" };
+        var brushes = Array.ConvertAll(colors, Color);
+        (Ink, Muted, Red, Background, Panel, Line, Accent) =
+            (brushes[0], brushes[1], brushes[2], brushes[3], brushes[4], brushes[5], brushes[6]);
+        for (int i = 0; i < brushes.Length; i++)
+            Application.Current.Resources[keys[i]] = brushes[i];
+        if (Application.Current.Resources.MergedDictionaries.Count == 0)
+            Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/Themes/Controls.xaml")
+            });
+    }
+    public static TextBlock Text(string value = "", double size = 14, Brush? color = null)
+    {
+        var text = new TextBlock { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3, 0, 3) };
-    public static TextBlock Money(string value = "", double size = 16) =>
-        new() { Text = value, FontSize = size, Foreground = Red, FontWeight = FontWeights.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3, 0, 3) };
+        var key = ReferenceEquals(color, Accent) ? "Accent" : ReferenceEquals(color, Muted) ? "Muted" : "Ink";
+        text.SetResourceReference(TextBlock.ForegroundProperty, key);
+        return text;
+    }
+
+    public static TextBlock Money(string value = "", double size = 16)
+    {
+        var text = Text(value, size);
+        text.FontWeight = FontWeights.SemiBold;
+        text.SetResourceReference(TextBlock.ForegroundProperty, "Red");
+        return text;
+    }
     public static Button Button(string label, Action action, bool primary = false)
     {
         var button = new Button { Content = label, Padding = new Thickness(11, 6, 11, 6),
@@ -52,6 +81,9 @@ static class Ui
             Template = ButtonTemplate, BorderThickness = new Thickness(1),
             Foreground = primary ? Background : Ink, Background = primary ? Accent : Panel,
             BorderBrush = primary ? Accent : Line };
+        button.SetResourceReference(Control.ForegroundProperty, primary ? "Background" : "Ink");
+        button.SetResourceReference(Control.BackgroundProperty, primary ? "Accent" : "Panel");
+        button.SetResourceReference(Control.BorderBrushProperty, primary ? "Accent" : "Line");
         button.Click += (_, _) => action();
         return button;
     }
@@ -147,6 +179,10 @@ sealed class Editor : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = Ui.Background;
         Foreground = Ui.Ink;
+        SetResourceReference(BackgroundProperty, "Background");
+        SetResourceReference(ForegroundProperty, "Ink");
+        SourceInitialized += (_, _) =>
+            WindowAppearance.Set(this, ((SolidColorBrush)Ui.Background).Color.R > 128);
         FontFamily = new FontFamily("Microsoft YaHei UI");
         var body = Ui.Stack(Ui.Text(title, 23), fields, status, footer);
         body.Margin = new Thickness(22);
@@ -193,4 +229,18 @@ sealed class Editor : Window
     }
 
     public void Status(string message) => status.Text = message;
+}
+
+static class WindowAppearance
+{
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+
+    public static void Set(Window window, bool light)
+    {
+        var handle = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero) return;
+        int dark = light ? 0 : 1;
+        DwmSetWindowAttribute(handle, 20, ref dark, sizeof(int));
+    }
 }
